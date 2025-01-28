@@ -14,27 +14,79 @@ data "aws_ami" "app_ami" {
   owners = ["979382823631"] # Bitnami
 }
 
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  tags = {
-    Name = "main-vpc"
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnet" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
+  
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1a"] # Specify the AZ you want to use
   }
 }
 
-resource "aws_subnet" "main" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-west-2a"
-  tags = {
-    Name = "main-subnet"
-  }
-}
-
-resource "aws_instance" "web" {
+resource "aws_instance" "blog" {
   ami           = data.aws_ami.app_ami.id
   instance_type = var.instance_type
-  subnet_id     = aws_subnet.main.id
+  vpc_security_group_ids = [aws_security_group.blog.id]
+
   tags = {
     Name = "HelloWorld"
   }
+}
+
+resource "aws_security_group" "blog" {
+  name       = "blog-sg"
+
+  tags = {
+    Name = "blog-sg"
+  }
+
+  vpc_id = data.aws_vpc.default.id
+}
+
+resource "aws_security_group_rule" "blog_http_in" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]  
+  security_group_id = aws_security_group.blog.id
+}
+
+resource "aws_security_group_rule" "blog_https_in" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       =  ["0.0.0.0/0"]  
+  security_group_id = aws_security_group.blog.id
+}
+
+resource "aws_security_group_rule" "blog_ssh_in" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       =  ["0.0.0.0/0"]  
+  security_group_id = aws_security_group.blog.id
+}
+
+resource "aws_security_group_rule" "blog_everything_out" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]  
+  security_group_id = aws_security_group.blog.id
 }

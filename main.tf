@@ -14,9 +14,6 @@ data "aws_ami" "app_ami" {
   owners = ["979382823631"] # Bitnami
 }
 
-# data "aws_vpc" "default" {
-#   default = true
-# }
 
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
@@ -34,33 +31,66 @@ module "vpc" {
   }
 }
 
-# data "aws_subnet" "default" {
-#   filter {
-#     name   = "vpc-id"
-#     values = [data.aws_vpc.default.id]
-#   }
-
-#   filter {
-#     name   = "default-for-az"
-#     values = ["true"]
-#   }
+module "autoscaling" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "8.0.1"
   
-#   filter {
-#     name   = "availability-zone"
-#     values = ["us-east-1a"] # Specify the AZ you want to use
-#   }
-# }
+  name                 = "blog"
+  
+  min_size             = 1
+  max_size             = 2
+  vpc_zone_identifier  = module.vpc.public_subnets
+  security_groups      = [module.security_group.security_group_id]
+  instance_type        = var.instance_type
+  image_id             = data.aws_ami.app_ami.id  
+}
 
-resource "aws_instance" "blog" {
-  ami                    = data.aws_ami.app_ami.id
-  instance_type          = var.instance_type
-  subnet_id              = module.vpc.public_subnets[0]
-  vpc_security_group_ids = [module.security_group.security_group_id]
+module "alb" {
+  source  = "terraform-aws-modules/alb/aws"
+  version = "9.13"
+
+  name               = "blog-alb"
+  load_balancer_type = "application"
+
+  vpc_id          = module.vpc.vpc_id
+  subnets         = module.vpc.public_subnets
+  security_groups = [module.security_group.security_group_id]
+
+  target_groups = {
+    blog_tg = {
+      name_prefix      = "blog-"
+      backend_protocol = "HTTP"
+      backend_port     = 80
+      target_type      = "instance"
+    }
+  }
+
+  listeners = {
+    http = {
+      port     = 80
+      protocol = "HTTP"
+      default_action = {
+        type             = "forward"
+        target_group_key = "blog_tg"
+      }
+    }
+  }
 
   tags = {
-    Name = "HelloWorld"
+    Environment = "dev"
   }
 }
+
+# resource "aws_instance" "blog" {
+#   ami                    = data.aws_ami.app_ami.id
+#   instance_type          = var.instance_type
+#   subnet_id              = module.vpc.public_subnets[0]
+#   vpc_security_group_ids = [module.security_group.security_group_id]
+
+#   tags = {
+#     Name = "HelloWorld"
+#   }
+# }
 
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
@@ -76,48 +106,3 @@ module "security_group" {
 }
 
 
-# resource "aws_security_group" "blog" {
-#   name       = "blog-sg"
-
-#   tags = {
-#     Name = "blog-sg"
-#   }
-
-#   vpc_id = data.aws_vpc.default.id
-# }
-
-# resource "aws_security_group_rule" "blog_http_in" {
-#   type              = "ingress"
-#   from_port         = 80
-#   to_port           = 80
-#   protocol          = "tcp"
-#   cidr_blocks       = ["0.0.0.0/0"]  
-#   security_group_id = aws_security_group.blog.id
-# }
-
-# resource "aws_security_group_rule" "blog_https_in" {
-#   type              = "ingress"
-#   from_port         = 443
-#   to_port           = 443
-#   protocol          = "tcp"
-#   cidr_blocks       =  ["0.0.0.0/0"]  
-#   security_group_id = aws_security_group.blog.id
-# }
-
-# resource "aws_security_group_rule" "blog_ssh_in" {
-#   type              = "ingress"
-#   from_port         = 22
-#   to_port           = 22
-#   protocol          = "tcp"
-#   cidr_blocks       =  ["0.0.0.0/0"]  
-#   security_group_id = aws_security_group.blog.id
-# }
-
-# resource "aws_security_group_rule" "blog_everything_out" {
-#   type              = "egress"
-#   from_port         = 0
-#   to_port           = 0
-#   protocol          = "-1"
-#   cidr_blocks       = ["0.0.0.0/0"]  
-#   security_group_id = aws_security_group.blog.id
-# }

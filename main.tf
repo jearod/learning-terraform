@@ -3,106 +3,97 @@ data "aws_ami" "app_ami" {
 
   filter {
     name   = "name"
-    values = ["bitnami-tomcat-*-x86_64-hvm-ebs-nami"]
+    values = [var.ami_filter.ami]
   }
 
   filter {
     name   = "virtualization-type"
-    values = ["hvm"]
+    values = [var.ami_filter.virtualization_type]
   }
 
-  owners = ["979382823631"] # Bitnami
+  owners = [var.ami_filter.owner]
 }
 
 
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
-  name = "blog_vpc_dev"
-  cidr = "10.0.0.0/16"
+  name = "${var.name_prefix}vpc"
+  cidr = "${var.vpc.cidr_prefix}.0.0/16"
 
-  azs             = ["us-west-2a", "us-west-2b", "us-west-2c"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-
+  azs             = ["${var.vpc.azs_prefix}a", "${var.vpc.azs_prefix}b", "${var.vpc.azs_prefix}c"]
+  public_subnets  = ["${var.vpc.cidr_prefix}.101.0/24", "${var.vpc.cidr_prefix}.102.0/24", "${var.vpc.cidr_prefix}.103.0/24"]
 
   tags = {
     Terraform   = "true"
-    Environment = "dev"
+    Environment = "var.environment"
   }
 }
 
 module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
-  version = "8.0.1"
-  
-  name                 = "blog"
-  
-  min_size             = 1
-  max_size             = 2
-  vpc_zone_identifier  = module.vpc.public_subnets
-  security_groups      = [module.security_group.security_group_id]
-  instance_type        = var.instance_type
-  image_id             = data.aws_ami.app_ami.id  
+  version = "6.5.2"
+
+  name = "${var.name_prefix}asg"
+
+  min_size            = var.asg.min
+  max_size            = var.asg.max
+  vpc_zone_identifier = module.vpc.public_subnets
+  target_group_arns   = module.alb.target_group_arns
+  security_groups     = [module.security_group.security_group_id]
+  instance_type       = var.instance_type
+  image_id            = data.aws_ami.app_ami.id
 }
 
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "9.13"
+  version = "~> 6.0"
 
-  name               = "blog-alb"
+  name = "blog-alb"
+
   load_balancer_type = "application"
 
-  vpc_id          = module.vpc.vpc_id
-  subnets         = module.vpc.public_subnets
-  security_groups = [module.security_group.security_group_id]
+  vpc_id             = module.vpc.vpc_id
+  subnets            = module.vpc.public_subnets
+  security_groups    = [module.security_group.security_group_id]
 
-  target_groups = {
-    blog_tg = {
+  target_groups = [
+    {
       name_prefix      = "blog-"
       backend_protocol = "HTTP"
       backend_port     = 80
       target_type      = "instance"
     }
-  }
+  ]
 
-  listeners = {
-    http = {
-      port     = 80
-      protocol = "HTTP"
-      default_action = {
-        type             = "forward"
-        target_group_key = "blog_tg"
-      }
+  http_tcp_listeners = [
+    {
+      port               = 80
+      protocol           = "HTTP"
+      target_group_index = 0
     }
-  }
+  ]
 
   tags = {
-    Environment = "dev"
+    Environment = "var.environment"
   }
 }
-
-# resource "aws_instance" "blog" {
-#   ami                    = data.aws_ami.app_ami.id
-#   instance_type          = var.instance_type
-#   subnet_id              = module.vpc.public_subnets[0]
-#   vpc_security_group_ids = [module.security_group.security_group_id]
-
-#   tags = {
-#     Name = "HelloWorld"
-#   }
-# }
 
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.3.0"
 
-  name    = "blog-sg"
+  name    = "${var.name_prefix}sg"
   vpc_id  = module.vpc.vpc_id
 
   ingress_rules       = ["https-443-tcp","http-80-tcp","ssh-tcp"]
   ingress_cidr_blocks = ["0.0.0.0/0"]
   egress_rules       = ["all-all"]
   egress_cidr_blocks = ["0.0.0.0/0"]
+
+  tags = {
+  Environment = "var.environment"
+  }
 }
 
 

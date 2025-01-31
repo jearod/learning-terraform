@@ -18,7 +18,7 @@ data "aws_ami" "app_ami" {
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
-  name = "${var.name_prefix}vpc"
+  name = "${var.environment}-vpc"
   cidr = "${var.vpc.cidr_prefix}.0.0/16"
 
   azs             = ["${var.vpc.azs_prefix}a", "${var.vpc.azs_prefix}b", "${var.vpc.azs_prefix}c"]
@@ -33,8 +33,7 @@ module "vpc" {
 module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "6.5.2"
-
-  name = "${var.name_prefix}asg"
+  name    = "${var.environment}-asg"
 
   min_size            = var.asg.min
   max_size            = var.asg.max
@@ -46,11 +45,9 @@ module "autoscaling" {
 }
 
 module "alb" {
-  source  = "terraform-aws-modules/alb/aws"
-  version = "~> 6.0"
-
-  name = "blog-alb"
-
+  source             = "terraform-aws-modules/alb/aws"
+  version            = "~> 6.0"
+  name               = "${var.environment}-alb"
   load_balancer_type = "application"
 
   vpc_id             = module.vpc.vpc_id
@@ -83,7 +80,7 @@ module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.3.0"
 
-  name    = "${var.name_prefix}sg"
+  name    = "${var.environment}-sg"
   vpc_id  = module.vpc.vpc_id
 
   ingress_rules       = ["https-443-tcp","http-80-tcp","ssh-tcp"]

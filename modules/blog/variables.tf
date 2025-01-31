@@ -19,13 +19,9 @@ variable "ami_filter" {
   }
 }
 
-variable "name_prefix" {
-  description = "Prefix to be used for naming resources"
-  default     = "blog-"
-}
-
 variable "environment" {
   description = "Environment to deploy the resources"
+  type        = string
   default     = "dev"
 }
 

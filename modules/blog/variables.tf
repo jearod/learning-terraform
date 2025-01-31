@@ -32,14 +32,14 @@ variable "environment" {
 variable "vpc" {
   description = "VPC configuration"
 
-  type        = object({
-    cidr_prefix    = string
-    azs_prefix     = string
+  type = object({
+    cidr_prefix = string
+    azs_prefix  = string
   })
 
   default = {
-    cidr_prefix    = "10.0"
-    azs_prefix     = "us-east-1"
+    cidr_prefix = "10.0"
+    azs_prefix  = "us-east-1"
   }
 }
 
